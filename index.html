@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>PETA SEBARAN FASILITAS KESEHATAN DI KABUPATEN MAGELANG</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="data/KabupatenMagelang_1.js"></script>
+        <script src="data/Faskes_2.js"></script>
+        <script>
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[-7.716747236430911,109.92009733674429],[-7.312843608367696,110.56136613011479]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // add class to format popup if it contains media
+		function addClassToPopupIfMedia(content, popup) {
+			var tempDiv = document.createElement('div');
+			tempDiv.innerHTML = content;
+			if (tempDiv.querySelector('td img')) {
+				popup._contentNode.classList.add('media');
+					// Delay to force the redraw
+					setTimeout(function() {
+						popup.update();
+					}, 10);
+			} else {
+				popup._contentNode.classList.remove('media');
+			}
+		}
+        var title = new L.Control({'position':'topleft'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>PETA SEBARAN FASILITAS KESEHATAN DI KABUPATEN MAGELANG</h2>';
+        };
+        title.addTo(map);
+        var abstract = new L.Control({'position':'topright'});
+        abstract.onAdd = function (map) {
+            this._div = L.DomUtil.create('div',
+            'leaflet-control abstract');
+            this._div.id = 'abstract'
+                this._div.setAttribute("onmouseenter", "abstract.show()");
+                this._div.setAttribute("onmouseleave", "abstract.hide()");
+                this.hide();
+                return this._div;
+            };
+            abstract.hide = function () {
+                this._div.classList.remove("abstractUncollapsed");
+                this._div.classList.add("abstract");
+                this._div.innerHTML = 'i'
+            }
+            abstract.show = function () {
+                this._div.classList.remove("abstract");
+                this._div.classList.add("abstractUncollapsed");
+                this._div.innerHTML = 'Peta ini menyajikan informasi sebaran fasilitas kesehatan (faskes) di Kabupaten Magelang yang dapat dieksplorasi secara interaktif. Klik setiap ikon faskes untuk melihat informasi lokasi dan dokumentasi yang tersedia.<br /><br />Sumber Data:<br />- Google Maps (Lokasi Faskes)<br />- Peta Rupa Bumi Indonesia (Batas Kecamatan) - Badan Informasi Geospasial<br /><br />Yasmin Nurul Balqis Telaumbanua<br />NIM: 11231010000025<br />Program Studi Kesehatan Masyarakat<br />Peminatan Biostatistik, Informatika Kesehatan dan Kependudukan<br />Fakultas Ilmu Kesehatan<br />UIN Syarif Hidayatullah Jakarta<br /><br />Petunjuk penggunaan:<br />- Klik ikon faskes untuk melihat informasi lokasi.<br />- Gunakan fitur Search untuk mencari nama faskes.<br />- Gunakan Measure untuk mengukur jarak dan luas.<br />- Gunakan tombol Layer untuk mengaktifkan atau menonaktifkan layer peta.';
+        };
+        abstract.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_GoogleSatellite_0');
+        map.getPane('pane_GoogleSatellite_0').style.zIndex = 400;
+        var layer_GoogleSatellite_0 = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatellite_0',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+        });
+        layer_GoogleSatellite_0;
+        map.addLayer(layer_GoogleSatellite_0);
+        function pop_KabupatenMagelang_1(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">WADMKC</th>\
+                        <td>' + (feature.properties['WADMKC'] !== null ? autolinker.link(String(feature.properties['WADMKC']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">WADMKK</th>\
+                        <td>' + (feature.properties['WADMKK'] !== null ? autolinker.link(String(feature.properties['WADMKK']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">kpdtn pddk</th>\
+                        <td>' + (feature.properties['kpdtn pddk'] !== null ? autolinker.link(String(feature.properties['kpdtn pddk']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Luas_HA</th>\
+                        <td>' + (feature.properties['Luas_HA'] !== null ? autolinker.link(String(feature.properties['Luas_HA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Jumlah TKM</th>\
+                        <td>' + (feature.properties['Jumlah TKM'] !== null ? autolinker.link(String(feature.properties['Jumlah TKM']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_KabupatenMagelang_1_0(feature) {
+            switch(String(feature.properties['WADMKC'])) {
+                case 'Bandongan':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Borobudur':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(222,53,41,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Candimulyo':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(229,82,54,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Dukun':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(237,110,67,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Grabag':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(244,139,81,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Kajoran':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(251,167,94,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Kaliangkrik':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,186,110,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Mertoyudan':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(254,201,128,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Mungkid':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(254,216,146,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Muntilan':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(254,232,164,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Ngablak':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,247,182,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Ngluwar':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(247,252,188,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Pakis':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(231,245,183,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Salam':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,239,178,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Salaman':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(199,232,173,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Sawangan':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(183,226,168,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Secang':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(165,217,165,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Srumbung':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(141,200,169,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Tegalrejo':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(116,182,173,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Tempuran':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(92,165,178,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Windusari':
+                    return {
+                pane: 'pane_KabupatenMagelang_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(67,148,182,1.0)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_KabupatenMagelang_1');
+        map.getPane('pane_KabupatenMagelang_1').style.zIndex = 401;
+        map.getPane('pane_KabupatenMagelang_1').style['mix-blend-mode'] = 'normal';
+        var layer_KabupatenMagelang_1 = new L.geoJson(json_KabupatenMagelang_1, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_KabupatenMagelang_1',
+            layerName: 'layer_KabupatenMagelang_1',
+            pane: 'pane_KabupatenMagelang_1',
+            onEachFeature: pop_KabupatenMagelang_1,
+            style: style_KabupatenMagelang_1_0,
+        });
+        bounds_group.addLayer(layer_KabupatenMagelang_1);
+        map.addLayer(layer_KabupatenMagelang_1);
+        function pop_Faskes_2(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">id</th>\
+                        <td>' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Faskes</th>\
+                        <td>' + (feature.properties['Faskes'] !== null ? autolinker.link(String(feature.properties['Faskes']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Alamat</th>\
+                        <td>' + (feature.properties['Alamat'] !== null ? autolinker.link(String(feature.properties['Alamat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Kontak</th>\
+                        <td>' + (feature.properties['Kontak'] !== null ? autolinker.link(String(feature.properties['Kontak']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Foto</th>\
+                        <td>' + (feature.properties['Foto'] !== null ? '<img src="images/' + String(feature.properties['Foto']).replace(/[\\/:]/g, '_').trim().replace(/'/g, '\'').replace(/"/g, '&quot;') + '">' : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">x</th>\
+                        <td>' + (feature.properties['x'] !== null ? autolinker.link(String(feature.properties['x']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">y</th>\
+                        <td>' + (feature.properties['y'] !== null ? autolinker.link(String(feature.properties['y']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Faskes_2_0(feature) {
+            switch(String(feature.properties['Faskes'])) {
+                case 'Apotek K24 Muntilan':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Apotek Widigdo Blabak':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Gumuk Walik Medika':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Klinik DAQU Sehat Magelang':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Klinik Pratama PKU Muhammadiyah Fajar Mertoyudan':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Laboratorium Kesehatan Kabupaten Magelang':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'POSYANDU " ANANDA "':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Puskesmas Kajoran I (WATUKARUNG)':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Puskesmas Kota Mungkid':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Puskesmas Pakis':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'RS PKU Grabag':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'RSUD Candi Umbul':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'RSUD Merah Putih Kabupaten Magelang':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'RSUD Muntilan Kabupaten Magelang':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+                case 'Rumah Sakit N-21 Gemilang':
+                    return {
+                pane: 'pane_Faskes_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Faskes_2.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_Faskes_2');
+        map.getPane('pane_Faskes_2').style.zIndex = 402;
+        map.getPane('pane_Faskes_2').style['mix-blend-mode'] = 'normal';
+        var layer_Faskes_2 = new L.geoJson(json_Faskes_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Faskes_2',
+            layerName: 'layer_Faskes_2',
+            pane: 'pane_Faskes_2',
+            onEachFeature: pop_Faskes_2,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_Faskes_2_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_Faskes_2);
+        map.addLayer(layer_Faskes_2);
+        var overlaysTree = [
+            {label: 'Faskes<br /><table><tr><td style="text-align: center;"><img src="legend/Faskes_2_ApotekK24Muntilan0.png" /></td><td>Apotek K24 Muntilan</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_ApotekWidigdoBlabak1.png" /></td><td>Apotek Widigdo Blabak</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_GumukWalikMedika2.png" /></td><td>Gumuk Walik Medika</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_KlinikDAQUSehatMagelang3.png" /></td><td>Klinik DAQU Sehat Magelang</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_KlinikPratamaPKUMuhammadiyahFajarMertoyudan4.png" /></td><td>Klinik Pratama PKU Muhammadiyah Fajar Mertoyudan</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_LaboratoriumKesehatanKabupatenMagelang5.png" /></td><td>Laboratorium Kesehatan Kabupaten Magelang</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_POSYANDUANANDA6.png" /></td><td>POSYANDU " ANANDA "</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_PuskesmasKajoranIWATUKARUNG7.png" /></td><td>Puskesmas Kajoran I (WATUKARUNG)</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_PuskesmasKotaMungkid8.png" /></td><td>Puskesmas Kota Mungkid</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_PuskesmasPakis9.png" /></td><td>Puskesmas Pakis</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_RSPKUGrabag10.png" /></td><td>RS PKU Grabag</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_RSUDCandiUmbul11.png" /></td><td>RSUD Candi Umbul</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_RSUDMerahPutihKabupatenMagelang12.png" /></td><td>RSUD Merah Putih Kabupaten Magelang</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_RSUDMuntilanKabupatenMagelang13.png" /></td><td>RSUD Muntilan Kabupaten Magelang</td></tr><tr><td style="text-align: center;"><img src="legend/Faskes_2_RumahSakitN21Gemilang14.png" /></td><td>Rumah Sakit N-21 Gemilang</td></tr></table>', layer: layer_Faskes_2},
+            {label: 'Kabupaten Magelang<br /><table><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Bandongan0.png" /></td><td>Bandongan</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Borobudur1.png" /></td><td>Borobudur</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Candimulyo2.png" /></td><td>Candimulyo</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Dukun3.png" /></td><td>Dukun</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Grabag4.png" /></td><td>Grabag</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Kajoran5.png" /></td><td>Kajoran</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Kaliangkrik6.png" /></td><td>Kaliangkrik</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Mertoyudan7.png" /></td><td>Mertoyudan</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Mungkid8.png" /></td><td>Mungkid</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Muntilan9.png" /></td><td>Muntilan</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Ngablak10.png" /></td><td>Ngablak</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Ngluwar11.png" /></td><td>Ngluwar</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Pakis12.png" /></td><td>Pakis</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Salam13.png" /></td><td>Salam</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Salaman14.png" /></td><td>Salaman</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Sawangan15.png" /></td><td>Sawangan</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Secang16.png" /></td><td>Secang</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Srumbung17.png" /></td><td>Srumbung</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Tegalrejo18.png" /></td><td>Tegalrejo</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Tempuran19.png" /></td><td>Tempuran</td></tr><tr><td style="text-align: center;"><img src="legend/KabupatenMagelang_1_Windusari20.png" /></td><td>Windusari</td></tr></table>', layer: layer_KabupatenMagelang_1},
+            {label: "Google Satellite", layer: layer_GoogleSatellite_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        var i = 0;
+        layer_KabupatenMagelang_1.eachLayer(function(layer) {
+            var context = {
+                feature: layer.feature,
+                variables: {}
+            };
+            layer.bindTooltip((layer.feature.properties['WADMKC'] !== null?String('<div style="color: #323232; font-size: 10pt; font-family: \'Open Sans\', sans-serif;">' + layer.feature.properties['WADMKC']) + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_KabupatenMagelang_1'});
+            labels.push(layer);
+            totalMarkers += 1;
+              layer.added = true;
+              addLabel(layer, i);
+              i++;
+        });
+        resetLabels([layer_KabupatenMagelang_1]);
+        map.on("zoomend", function(){
+            resetLabels([layer_KabupatenMagelang_1]);
+        });
+        map.on("layeradd", function(){
+            resetLabels([layer_KabupatenMagelang_1]);
+        });
+        map.on("layerremove", function(){
+            resetLabels([layer_KabupatenMagelang_1]);
+        });
+        </script>
+    </body>
+</html>
